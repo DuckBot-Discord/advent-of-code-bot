@@ -17,6 +17,6 @@ class UserData(TypedDict):
 
 
 class Leaderboard(TypedDict):
-    members: Dict[int, UserData]
+    members: Dict[str, UserData]
     owner_id: int
     event: str

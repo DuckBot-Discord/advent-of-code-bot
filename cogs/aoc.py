@@ -78,7 +78,7 @@ class AOC(commands.Cog):
         """Updates all the nicks of users who have a claimed aoc user."""
         data = await self.bot.pool.fetch("SELECT user_id, aoc_user_id FROM linked_accounts")
         for user_id, aoc_uid in data:
-            member_payload = self.leaderboard.get("members", {}).get(aoc_uid)
+            member_payload = self.leaderboard.get("members", {}).get(str(aoc_uid))
             if not member_payload:
                 continue
             stars = member_payload['stars']
@@ -98,8 +98,12 @@ class AOC(commands.Cog):
             return
         uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
         if not uid:
+            if member.name == name:
+                await member.edit(nick=None)
+            else:
+                await member.edit(nick=name)
             return
-        stars = self.leaderboard.get("members", {}).get(uid, {}).get("stars") or 0
+        stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
         new = f"{name} ⭐{stars}"
         if member.display_name != new:
             await member.edit(nick=new)
@@ -139,12 +143,21 @@ class AOC(commands.Cog):
     @app_commands.command(name='unlink')
     async def unclaim(self, interaction: discord.Interaction):
         """Unlinks the AOC user ID from your account"""
-        data = await self.bot.pool.fetchrow("DELETE FROM linked_users WHERE user_id = $1 RETURNING *")
+        data = await self.bot.pool.fetchrow(
+            "DELETE FROM linked_accounts WHERE user_id = $1 RETURNING *", interaction.user.id
+        )
         if not data:
             return await interaction.response.send_message(
                 'You do not have an AOC account linked to your account.', ephemeral=True
             )
         await interaction.response.send_message('Account unlinked.')
+
+        if isinstance(interaction.user, discord.Member):
+            member: discord.Member | None = interaction.user
+        else:
+            member = self.guild.get_member(interaction.user.id)
+        if member:
+            await self.update_name(member)
 
 
 async def setup(bot: AOCBot):
