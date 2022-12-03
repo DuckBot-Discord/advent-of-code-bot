@@ -63,9 +63,13 @@ class AOC(commands.Cog):
         await self.update_all_names()
 
     @cache_task.error
-    async def foo(self, error: BaseException):
+    async def error_log(self, error: BaseException):
         _log.error("An unexpected esception happened within the cache task", exc_info=error)
         self.cache_task.restart()
+
+    @cache_task.before_loop
+    async def ct_before_loop(self):
+        await self.bot.wait_until_ready()
 
     def trim_name(self, member: discord.Member) -> str:
         """Returns the member's name without the star counter."""
@@ -90,6 +94,14 @@ class AOC(commands.Cog):
             if member.display_name != new:
                 await member.edit(nick=new)
 
+    async def clear_names(self):
+        """Clears all the names of the star counters."""
+        await self.guild.chunk()
+        for member in self.guild.members:
+            name = self.trim_name(member)
+            if name != member.display_name:
+                await member.edit(nick=name == member.name and name or None)
+
     async def update_name(self, member: discord.Member) -> None:
         """Updates a single member's name"""
         guild = member.guild
@@ -98,11 +110,9 @@ class AOC(commands.Cog):
             return
         uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
         if not uid:
-            if member.name == name:
-                await member.edit(nick=None)
-            else:
-                await member.edit(nick=name)
-            return
+            if member.display_name != name:
+                await member.edit(nick=name == member.name and name or None)
+
         stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
         new = f"{name} ⭐{stars}"
         if member.display_name != new:
@@ -110,7 +120,7 @@ class AOC(commands.Cog):
 
     @app_commands.command(name='link')
     @app_commands.describe(user_id='Your AOC user ID. Run /link for how to get it.')
-    async def claim(self, interaction: discord.Interaction, user_id: int | None):
+    async def link(self, interaction: discord.Interaction, user_id: int | None):
         """Links your AOC account to your Discord account."""
         if not user_id:
             text = (
@@ -141,7 +151,7 @@ class AOC(commands.Cog):
                 await self.update_name(interaction.user)
 
     @app_commands.command(name='unlink')
-    async def unclaim(self, interaction: discord.Interaction):
+    async def unlink(self, interaction: discord.Interaction):
         """Unlinks the AOC user ID from your account"""
         data = await self.bot.pool.fetchrow(
             "DELETE FROM linked_accounts WHERE user_id = $1 RETURNING *", interaction.user.id

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import dotenv
 import asyncio
@@ -7,7 +8,11 @@ import asyncpg
 import traceback
 from datetime import time, datetime, timezone
 from logging import getLogger
+from typing import TYPE_CHECKING
 from discord.ext import commands, tasks
+
+if TYPE_CHECKING:
+    from cogs.aoc import AOC
 
 log = getLogger('bot')
 
@@ -49,14 +54,21 @@ class AOCBot(commands.Bot):
     async def check_for_times(self):
         if datetime.now().month == 12:
             if 'cogs.aoc' not in self.extensions.keys():
-                await self.unload_extension('cogs.aoc')
+                await self.load_extension('cogs.aoc')
             if self.status == discord.Status.online:
-                await self.change_presence(status=discord.Status.offline)
+                await self.change_presence(status=discord.Status.online)
         else:
             if 'cogs.aoc' in self.extensions.keys():
+                cog: AOC = self.get_cog('AOC')  # type: ignore
+                if cog:
+                    await cog.clear_names()
                 await self.unload_extension('cogs.aoc')
             if self.status == discord.Status.offline:
-                await self.change_presence(status=discord.Status.online)
+                await self.change_presence(status=discord.Status.offline)
+
+    @check_for_times.before_loop
+    async def ctf_before(self):
+        await self.wait_until_ready()
 
     async def on_ready(self) -> None:
         """|coro| Called when the bot's internal cache is ready."""
