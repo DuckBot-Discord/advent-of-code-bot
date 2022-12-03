@@ -25,12 +25,13 @@ class AOCBot(commands.Bot):
     """The Advent Of Code Bot for the Duck Hideout guild"""
 
     def __init__(self, pool: asyncpg.Pool, session: aiohttp.ClientSession) -> None:
+        status = discord.Status.online if datetime.now().month == 12 else discord.Status.offline
         super().__init__(
             intents=discord.Intents(guilds=True, members=True, messages=True),
             command_prefix=commands.when_mentioned,
-            status=discord.Status.dnd,
+            status=status,
             help_command=None,
-            activity=discord.Activity(type=discord.ActivityType.playing, name='Work In Progress!'),
+            activity=discord.Activity(type=discord.ActivityType.listening, name='/link'),
         )
         self.pool: asyncpg.Pool[asyncpg.Record] = pool
         self.session: aiohttp.ClientSession = session
@@ -49,9 +50,13 @@ class AOCBot(commands.Bot):
         if datetime.now().month == 12:
             if 'cogs.aoc' not in self.extensions.keys():
                 await self.unload_extension('cogs.aoc')
+            if self.status == discord.Status.online:
+                await self.change_presence(status=discord.Status.offline)
         else:
             if 'cogs.aoc' in self.extensions.keys():
                 await self.unload_extension('cogs.aoc')
+            if self.status == discord.Status.offline:
+                await self.change_presence(status=discord.Status.online)
 
     async def on_ready(self) -> None:
         """|coro| Called when the bot's internal cache is ready."""
