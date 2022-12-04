@@ -87,7 +87,7 @@ class AOC(commands.Cog):
                 continue
             stars = member_payload['stars']
             member = self.guild.get_member(user_id)
-            if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role.position:
+            if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role:
                 continue
             base = self.trim_name(member)
             new = f"{base} ⭐{stars}"
