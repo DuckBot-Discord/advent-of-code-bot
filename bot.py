@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 log = getLogger('bot')
 
-INITIAL_EXTENSIONS = ['cogs.errorhandler', 'jishaku'] + ['cogs.aoc'] if datetime.now().month == 12 else []
+INITIAL_EXTENSIONS = ['cogs.errorhandler', 'jishaku'] + (['cogs.aoc'] if datetime.now().month == 12 else [])
 
 
 def get(k: str) -> str:
