@@ -80,19 +80,23 @@ class AOC(commands.Cog):
 
     async def update_all_names(self):
         """Updates all the nicks of users who have a claimed aoc user."""
-        data = await self.bot.pool.fetch("SELECT user_id, aoc_user_id FROM linked_accounts")
-        for user_id, aoc_uid in data:
-            member_payload = self.leaderboard.get("members", {}).get(str(aoc_uid))
-            if not member_payload:
-                continue
-            stars = member_payload['stars']
-            member = self.guild.get_member(user_id)
-            if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role:
-                continue
-            base = self.trim_name(member)
-            new = f"{base} ⭐{stars}"
-            if member.display_name != new:
-                await member.edit(nick=new)
+        if datetime.now().month == 12:
+            data = await self.bot.pool.fetch("SELECT user_id, aoc_user_id FROM linked_accounts")
+            for user_id, aoc_uid in data:
+                member_payload = self.leaderboard.get("members", {}).get(str(aoc_uid))
+                if not member_payload:
+                    continue
+                stars = member_payload['stars']
+                member = self.guild.get_member(user_id)
+                if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role:
+                    continue
+                base = self.trim_name(member)
+                new = f"{base} ⭐{stars}"
+                if member.display_name != new:
+                    await member.edit(nick=new)
+        else:
+            await self.clear_names()
+            await self.bot.unload_extension('cogs.aoc')
 
     async def clear_names(self):
         """Clears all the names of the star counters."""
