@@ -55,7 +55,8 @@ class AOCBot(commands.Bot):
         if datetime.now().month == 12:
             if 'cogs.aoc' not in self.extensions.keys():
                 await self.load_extension('cogs.aoc')
-            if self.status == discord.Status.online:
+            if self.status == discord.Status.offline:
+                self.status = discord.Status.offline
                 await self.change_presence(status=discord.Status.online)
         else:
             if 'cogs.aoc' in self.extensions.keys():
@@ -63,7 +64,8 @@ class AOCBot(commands.Bot):
                 if cog:
                     await cog.clear_names()
                 await self.unload_extension('cogs.aoc')
-            if self.status == discord.Status.offline:
+            if self.status == discord.Status.online:
+                self.status = discord.Status.offline
                 await self.change_presence(status=discord.Status.offline)
 
     @check_for_times.before_loop
