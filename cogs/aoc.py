@@ -62,6 +62,21 @@ class AOC(commands.Cog):
 
         await self.update_all_names()
 
+        now = datetime.now(timezone.utc)
+        if now.hour == 5 and now.minute == 0:
+            forum = self.bot.get_channel(1179942162511708220)
+
+            if not isinstance(forum, discord.ForumChannel):
+                return
+            if discord.utils.find(lambda t: f'{now.year}: Day {now.day}:' in t.name, forum.threads):
+                return
+
+            async with self.bot.session.get(f'https://adventofcode.com/{now.year}/day/{now.day}') as res:
+                res.raise_for_status()
+                body = await res.text()
+                title = re.findall(r"--- Day \d+: (.+) ---", body)[0]
+                await forum.create_thread(name=f"--- {now.year}: Day {now.day}: {title} ---", content=str(res.url))
+
     @cache_task.error
     async def error_log(self, error: BaseException):
         _log.error("An unexpected esception happened within the cache task", exc_info=error)
@@ -93,7 +108,10 @@ class AOC(commands.Cog):
                 base = self.trim_name(member)
                 new = f"{base} ⭐{stars}"
                 if member.display_name != new:
-                    await member.edit(nick=new)
+                    try:
+                        await member.edit(nick=new)
+                    except:
+                        pass
         else:
             await self.clear_names()
             await self.bot.unload_extension('cogs.aoc')
