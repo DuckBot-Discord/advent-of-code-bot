@@ -133,10 +133,6 @@ class AOC(commands.Cog):
 
                 if kwargs:
                     await member.edit(**kwargs)
-        
-        else:
-            await self.clear_names()
-            await self.bot.unload_extension('cogs.aoc')
 
     async def clear_names(self):
         """Clears all the names of the star counters."""
