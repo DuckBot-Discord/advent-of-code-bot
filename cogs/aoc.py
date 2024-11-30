@@ -122,7 +122,10 @@ class AOC(commands.Cog):
         for member in self.guild.members:
             name = self.trim_name(member)
             if name != member.display_name:
-                await member.edit(nick=name == member.name and name or None)
+                try:
+                    await member.edit(nick=name != member.name and name or None)
+                except:
+                    pass
 
     async def update_name(self, member: discord.Member) -> None:
         """Updates a single member's name"""
@@ -133,7 +136,7 @@ class AOC(commands.Cog):
         uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
         if not uid:
             if member.display_name != name:
-                await member.edit(nick=name == member.name and name or None)
+                await member.edit(nick=name != member.name and name or None)
 
         stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
         new = f"{name} ⭐{stars}"
