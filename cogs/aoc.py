@@ -70,8 +70,8 @@ class AOC(commands.Cog):
 
         await self.update_all_names()
 
-        now = datetime.now(timezone.utc)
-        if now.hour == 5 and now.minute == 0:
+        now = discord.utils.utcnow()
+        if now.month == 12 and now.hour == 5 and now.minute == 0:
             forum = self.bot.get_channel(1179942162511708220)
 
             if not isinstance(forum, discord.ForumChannel):
@@ -83,7 +83,11 @@ class AOC(commands.Cog):
                 res.raise_for_status()
                 body = await res.text()
                 title = re.findall(r"--- Day \d+: (.+) ---", body)[0]
-                await forum.create_thread(name=f"--- {now.year}: Day {now.day}: {title} ---", content=str(res.url))
+                await forum.create_thread(
+                    name=f"--- {now.year}: Day {now.day}: {title} ---", 
+                    content=f"{self.role.mention} {str(res.url)}\n-# Don't want notifications? `/unlink` to remove your role!", 
+                    allowed_mentions=discord.AllowedMentions(roles=True),
+                )
 
     @cache_task.error
     async def error_log(self, error: BaseException):
