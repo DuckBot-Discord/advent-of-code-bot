@@ -16,8 +16,11 @@ if TYPE_CHECKING:
 
 log = getLogger('bot')
 
-INITIAL_EXTENSIONS = ['cogs.errorhandler', 'jishaku'] + (['cogs.aoc'] if datetime.now().month == 12 else [])
+def is_advent():
+    now = discord.utils.utcnow()
+    return now.month == 12 or (now.month == 11 and now.day > 15)
 
+INITIAL_EXTENSIONS = ['cogs.errorhandler', 'jishaku'] + (['cogs.aoc'] if is_advent() else [])
 
 def get(k: str) -> str:
     v = os.getenv(k)
@@ -30,7 +33,7 @@ class AOCBot(commands.Bot):
     """The Advent Of Code Bot for the Duck Hideout guild"""
 
     def __init__(self, pool: asyncpg.Pool, session: aiohttp.ClientSession) -> None:
-        status = discord.Status.online if datetime.now().month == 12 else discord.Status.offline
+        status = discord.Status.online if is_advent() else discord.Status.offline
         super().__init__(
             intents=discord.Intents(guilds=True, members=True, messages=True),
             command_prefix=commands.when_mentioned,
@@ -52,7 +55,7 @@ class AOCBot(commands.Bot):
 
     @tasks.loop(time=time(hour=0, tzinfo=timezone.utc))
     async def check_for_times(self):
-        if datetime.now().month == 12:
+        if is_advent():
             if 'cogs.aoc' not in self.extensions.keys():
                 await self.load_extension('cogs.aoc')
                 await self.tree.sync()
