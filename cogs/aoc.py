@@ -35,6 +35,14 @@ class AOC(commands.Cog):
             raise RuntimeError("Could not find the specified guild")
         return guild
 
+    @property
+    def role(self) -> discord.Role:
+        """Duck Hideout"""
+        role = self.guild.get_role(int(get('AOC_ROLE_ID')))
+        if not role:
+            raise RuntimeError("Could not find the AOC role")
+        return role
+    
     async def fetch_leaderboard(self) -> Leaderboard:
         url = f"https://adventofcode.com/{datetime.now().year}/leaderboard/private/view/{get('LEADERBOARD_ID')}.json"
         cookies = {'session': get('AOC_SESSION')}
@@ -98,20 +106,30 @@ class AOC(commands.Cog):
         if datetime.now().month == 12:
             data = await self.bot.pool.fetch("SELECT user_id, aoc_user_id FROM linked_accounts")
             for user_id, aoc_uid in data:
+                
                 member_payload = self.leaderboard.get("members", {}).get(str(aoc_uid))
                 if not member_payload:
                     continue
+                
                 stars = member_payload['stars']
+                
                 member = self.guild.get_member(user_id)
                 if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role:
                     continue
+
                 base = self.trim_name(member)
                 new = f"{base} ⭐{stars}"
-                if member.display_name != new:
-                    try:
-                        await member.edit(nick=new)
-                    except:
-                        pass
+                kwargs = {}
+                
+                if stars and member.display_name != new:
+                    kwargs.update(nick=new)
+
+                if not member.get_role(self.role):
+                    kwargs.update(roles=member.roles + [self.role])
+
+                if kwargs:
+                    await member.edit(**kwargs)
+        
         else:
             await self.clear_names()
             await self.bot.unload_extension('cogs.aoc')
@@ -136,12 +154,21 @@ class AOC(commands.Cog):
         uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
         if not uid:
             if member.display_name != name:
-                await member.edit(nick=name != member.name and name or None)
+                roles = [r for r in member.roles if r != self.role]
+                await member.edit(nick=name != member.name and name or None, roles=roles)
 
         stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
         new = f"{name} ⭐{stars}"
-        if member.display_name != new:
-            await member.edit(nick=new)
+        kwargs = {}
+
+        if stars and member.display_name != new:
+            kwargs.update(nick=new)
+
+        if not member.get_role(self.role):
+            kwargs.update(roles=member.roles + [self.role])
+
+        if kwargs:
+            await member.edit(**kwargs)
 
     @app_commands.command(name='link')
     @app_commands.describe(user_id='Your AOC user ID. Run /link for how to get it.')
@@ -155,9 +182,9 @@ class AOC(commands.Cog):
                 "\nWhat would you like to be called?"
                 "\n"
                 "\n( ) (anonymous user #1234567)"
-                "\n                     ^^^^^^^ There it is!"
+                "\n        There it is! ^^^^^^^"
                 "\n\u200b\n```"
-                f"\nGreat! Now you can claim your account using `/claim user_id: YOUR ID`"
+                f"\nGreat! Now you can claim your account using `/link user_id: YOUR ID`"
             )
             return await interaction.response.send_message(text, ephemeral=True)
         try:
@@ -170,7 +197,7 @@ class AOC(commands.Cog):
             await interaction.response.send_message(detail, ephemeral=True)
         else:
             await interaction.response.send_message(
-                f'Succesfully linked AOC account. Please go [here](https://adventofcode.com/2022/leaderboard/private) and join the leaderboard (`{get("LEADERBOARD_INVITE")}`) so we can track your stars.'
+                f'Succesfully linked AOC account. Please go [here](https://adventofcode.com/leaderboard/private) and join the leaderboard (`{get("LEADERBOARD_INVITE")}`) so we can track your stars.'
             )
             if isinstance(interaction.user, discord.Member):
                 await self.update_name(interaction.user)
