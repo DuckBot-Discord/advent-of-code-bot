@@ -88,7 +88,7 @@ class AOCBot(commands.Bot):
 
 
 if __name__ == "__main__":
-    dotenv.load_dotenv()
+    dotenv.load_dotenv(override=True)
 
     async def startup():
         async with asyncpg.create_pool(get("DSN")) as pool, aiohttp.ClientSession() as session, AOCBot(pool, session) as bot:

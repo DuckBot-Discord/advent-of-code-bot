@@ -55,8 +55,8 @@ class AOC(commands.Cog):
         try:
             self.leaderboard: Leaderboard = await self.fetch_leaderboard()
             _log.info('Initial leaderboard fetched succesfully.')
-        except:
-            _log.error("Failed initial leaderboard fetching.")
+        except Exception as e:
+            _log.error("Failed initial leaderboard fetching.", exc_info=e)
             self.leaderboard = {'members': {}, 'owner_id': 0, 'event': 'unknown'}
         self.cache_task.start()
 
@@ -65,8 +65,8 @@ class AOC(commands.Cog):
         try:
             self.leaderboard = await self.fetch_leaderboard()
             _log.info('Fetched leaderboard succesfully.')
-        except:
-            _log.error('Failed to update leaderboard.')
+        except Exception as e:
+            _log.error('Failed to update leaderboard.', exc_info=e)
 
         await self.update_all_names()
 
@@ -128,7 +128,7 @@ class AOC(commands.Cog):
                 if stars and member.display_name != new:
                     kwargs.update(nick=new)
 
-                if not member.get_role(self.role):
+                if self.role not in member.roles:
                     kwargs.update(roles=member.roles + [self.role])
 
                 if kwargs:
@@ -164,7 +164,7 @@ class AOC(commands.Cog):
         if stars and member.display_name != new:
             kwargs.update(nick=new)
 
-        if not member.get_role(self.role):
+        if self.role not in member.roles:
             kwargs.update(roles=member.roles + [self.role])
 
         if kwargs:
