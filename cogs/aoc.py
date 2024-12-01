@@ -26,6 +26,7 @@ class AOC(commands.Cog):
     def __init__(self, bot: AOCBot) -> None:
         super().__init__()
         self.bot = bot
+        self.leaderboard: Leaderboard = {'members': {}, 'owner_id': 0, 'event': 'unknown'}
 
     @property
     def guild(self) -> discord.Guild:
@@ -42,32 +43,33 @@ class AOC(commands.Cog):
         if not role:
             raise RuntimeError("Could not find the AOC role")
         return role
-    
-    async def fetch_leaderboard(self) -> Leaderboard:
-        url = f"https://adventofcode.com/{datetime.now().year}/leaderboard/private/view/{get('LEADERBOARD_ID')}.json"
-        cookies = {'session': get('AOC_SESSION')}
-        resp = await self.bot.session.get(url, cookies=cookies)
-        resp.raise_for_status()
-        return await resp.json()
+
+    async def update_leaderboard(self) -> Leaderboard:
+        _log.info("Updating leaderboard...")
+
+        try:
+            url = f"https://adventofcode.com/{datetime.now().year}/leaderboard/private/view/{get('LEADERBOARD_ID')}.json"
+            cookies = {'session': get('AOC_SESSION')}
+
+            resp = await self.bot.session.get(url, cookies=cookies)
+            resp.raise_for_status()
+
+            self.leaderboard: Leaderboard = await resp.json()
+            _log.info("Successfully updated leaderboard.")
+
+        except Exception as e:
+            _log.error("Failed to update leaderboard.", exc_info=e)
+
+        return self.leaderboard
 
     async def cog_load(self) -> None:
         """Starts the process of fetching the leaderboard."""
-        try:
-            self.leaderboard: Leaderboard = await self.fetch_leaderboard()
-            _log.info('Initial leaderboard fetched succesfully.')
-        except Exception as e:
-            _log.error("Failed initial leaderboard fetching.", exc_info=e)
-            self.leaderboard = {'members': {}, 'owner_id': 0, 'event': 'unknown'}
+        await self.update_all_names()
         self.cache_task.start()
 
     @tasks.loop(time=get_times())
     async def cache_task(self):
-        try:
-            self.leaderboard = await self.fetch_leaderboard()
-            _log.info('Fetched leaderboard succesfully.')
-        except Exception as e:
-            _log.error('Failed to update leaderboard.', exc_info=e)
-
+        await self.update_leaderboard()
         await self.update_all_names()
 
         now = discord.utils.utcnow()
@@ -84,8 +86,8 @@ class AOC(commands.Cog):
                 body = await res.text()
                 title = re.findall(r"--- Day \d+: (.+) ---", body)[0]
                 await forum.create_thread(
-                    name=f"--- {now.year}: Day {now.day}: {title} ---", 
-                    content=f"{self.role.mention} {str(res.url)}\n-# Don't want notifications? `/unlink` to remove your role!", 
+                    name=f"--- {now.year}: Day {now.day}: {title} ---",
+                    content=f"{self.role.mention} {str(res.url)}\n-# Don't want notifications? `/unlink` to remove your role!",
                     allowed_mentions=discord.AllowedMentions(roles=True),
                 )
 
@@ -110,13 +112,13 @@ class AOC(commands.Cog):
         if datetime.now().month == 12:
             data = await self.bot.pool.fetch("SELECT user_id, aoc_user_id FROM linked_accounts")
             for user_id, aoc_uid in data:
-                
+
                 member_payload = self.leaderboard.get("members", {}).get(str(aoc_uid))
                 if not member_payload:
                     continue
-                
+
                 stars = member_payload['stars']
-                
+
                 member = self.guild.get_member(user_id)
                 if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role:
                     continue
@@ -124,7 +126,7 @@ class AOC(commands.Cog):
                 base = self.trim_name(member)
                 new = f"{base} ⭐{stars}"
                 kwargs = {}
-                
+
                 if stars and member.display_name != new:
                     kwargs.update(nick=new)
 
@@ -220,6 +222,57 @@ class AOC(commands.Cog):
             member = self.guild.get_member(interaction.user.id)
         if member:
             await self.update_name(member)
+
+    @app_commands.command(name='leaderboard')
+    async def display_leaderboard(self, interaction: discord.Interaction):
+        """Displays this server's AOC leaderboard"""
+        await interaction.response.defer()
+
+        await self.update_leaderboard()
+        leaderboard_data = sorted(
+            list(self.leaderboard["members"].values()),
+            key=lambda u: (u["local_score"], u["name"]),
+            reverse=True,
+        )
+
+        user_mapping = {
+            entry["aoc_user_id"]: entry["user_id"]
+            for entry in await self.bot.pool.fetch("SELECT aoc_user_id, user_id FROM linked_accounts")
+        }
+
+        paginator = commands.Paginator(prefix="", suffix="")
+        score_width = len(str(max([x["local_score"] for x in leaderboard_data])))
+        index_width = len(str(len(leaderboard_data))) + 1
+
+        previous_score = 0
+        for idx, leaderboard_entry in enumerate(leaderboard_data):
+
+            name = leaderboard_entry["name"]
+            discord_id = user_mapping.get(leaderboard_entry["id"], None)
+            if discord_id:
+                discord_user = self.guild.get_member(discord_id)
+                if discord_user:
+                    name = discord_user.mention
+
+            if leaderboard_entry["local_score"] == previous_score:
+                index = "".rjust(index_width)
+
+            else:
+                index = f"{idx})".rjust(index_width)
+            previous_score = leaderboard_entry["local_score"]
+
+            score = str(leaderboard_entry['local_score']).rjust(score_width)
+
+            paginator.add_line(f"`{index} {score}` {name}")
+
+        pages = iter(paginator.pages)
+        await interaction.followup.send(next(pages))
+
+        for page in pages:
+            if isinstance(interaction.channel, discord.abc.Messageable):
+                await interaction.channel.send(page)
+            else:
+                await interaction.followup.send(page)
 
 
 async def setup(bot: AOCBot):
