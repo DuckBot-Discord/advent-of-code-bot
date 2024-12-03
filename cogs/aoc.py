@@ -245,7 +245,7 @@ class AOC(commands.Cog):
         index_width = len(str(len(leaderboard_data))) + 1
 
         previous_score = 0
-        for idx, leaderboard_entry in enumerate(leaderboard_data):
+        for idx, leaderboard_entry in enumerate(leaderboard_data, start=1):
 
             name = leaderboard_entry["name"]
             discord_id = user_mapping.get(leaderboard_entry["id"], None)
