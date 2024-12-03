@@ -65,38 +65,53 @@ class AOC(commands.Cog):
     async def cog_load(self) -> None:
         """Starts the process of fetching the leaderboard."""
         await self.update_all_names()
-        self.cache_task.start()
+        self.update_leaderboard_and_names.start()
+        self.daily_thread.start()
+
+    async def cog_unload(self) -> None:
+        self.update_leaderboard_and_names.cancel()
+        self.daily_thread.cancel()
 
     @tasks.loop(time=get_times())
-    async def cache_task(self):
+    async def update_leaderboard_and_names(self):
         await self.update_leaderboard()
         await self.update_all_names()
 
+    @tasks.loop(name='create-aoc-daily-thread', time=time(5))
+    async def daily_thread(self):
         now = discord.utils.utcnow()
-        if now.month == 12 and now.hour == 5 and now.minute == 0:
-            forum = self.bot.get_channel(1179942162511708220)
+        if now.month != 12:
+            return
 
-            if not isinstance(forum, discord.ForumChannel):
+        forum = self.bot.get_channel(1179942162511708220)
+
+        if not isinstance(forum, discord.ForumChannel):
+            return
+        if discord.utils.find(lambda t: f'{now.year}: Day {now.day}:' in t.name, forum.threads):
+            return
+
+        async with self.bot.session.get(f'https://adventofcode.com/{now.year}/day/{now.day}') as res:
+            res.raise_for_status()
+            body = await res.text()
+            title = re.findall(r"--- Day \d+: (.+) ---", body)[0]
+            title = f"--- {now.year}: Day {now.day}: {title} ---"
+
+            if discord.utils.get(forum.threads, name=title):
                 return
-            if discord.utils.find(lambda t: f'{now.year}: Day {now.day}:' in t.name, forum.threads):
-                return
 
-            async with self.bot.session.get(f'https://adventofcode.com/{now.year}/day/{now.day}') as res:
-                res.raise_for_status()
-                body = await res.text()
-                title = re.findall(r"--- Day \d+: (.+) ---", body)[0]
-                await forum.create_thread(
-                    name=f"--- {now.year}: Day {now.day}: {title} ---",
-                    content=f"{self.role.mention} {str(res.url)}\n-# Don't want notifications? `/unlink` to remove your role!",
-                    allowed_mentions=discord.AllowedMentions(roles=True),
-                )
+            await forum.create_thread(
+                name=title,
+                content=f"{self.role.mention} {str(res.url)}\n-# Don't want notifications? `/unlink` to remove your role!",
+                allowed_mentions=discord.AllowedMentions(roles=True),
+            )
 
-    @cache_task.error
+    @update_leaderboard_and_names.error
     async def error_log(self, error: BaseException):
-        _log.error("An unexpected esception happened within the cache task", exc_info=error)
-        self.cache_task.restart()
+        _log.error("An unexpected exception happened within the cache task", exc_info=error)
+        self.update_leaderboard_and_names.restart()
 
-    @cache_task.before_loop
+    @daily_thread.before_loop
+    @update_leaderboard_and_names.before_loop
     async def ct_before_loop(self):
         await self.bot.wait_until_ready()
 
@@ -107,34 +122,12 @@ class AOC(commands.Cog):
             return match.group(1).strip()
         return member.display_name
 
-    async def update_all_names(self):
+    async def update_all_names(self, bypass: bool = False):
         """Updates all the nicks of users who have a claimed aoc user."""
-        if datetime.now().month == 12:
-            data = await self.bot.pool.fetch("SELECT user_id, aoc_user_id FROM linked_accounts")
-            for user_id, aoc_uid in data:
-
-                member_payload = self.leaderboard.get("members", {}).get(str(aoc_uid))
-                if not member_payload:
-                    continue
-
-                stars = member_payload['stars']
-
-                member = self.guild.get_member(user_id)
-                if not member or member == self.guild.owner or member.top_role >= self.guild.me.top_role:
-                    continue
-
-                base = self.trim_name(member)
-                new = f"{base} ⭐{stars}"
-                kwargs = {}
-
-                if stars and member.display_name != new:
-                    kwargs.update(nick=new)
-
-                if self.role not in member.roles:
-                    kwargs.update(roles=member.roles + [self.role])
-
-                if kwargs:
-                    await member.edit(**kwargs)
+        if bypass or datetime.now().month == 12:
+            await self.guild.chunk()
+            for member in self.guild.members:
+                await self.update_name(member)
 
     async def clear_names(self):
         """Clears all the names of the star counters."""
@@ -149,28 +142,31 @@ class AOC(commands.Cog):
 
     async def update_name(self, member: discord.Member) -> None:
         """Updates a single member's name"""
-        guild = member.guild
-        name = self.trim_name(member)
-        if member == guild.owner or member.top_role >= guild.me.top_role:
-            return
-        uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
-        if not uid:
-            if member.display_name != name:
-                roles = [r for r in member.roles if r != self.role]
-                await member.edit(nick=name != member.name and name or None, roles=roles)
+        try:
+            guild = member.guild
+            name = self.trim_name(member)
+            if member == guild.owner or member.top_role >= guild.me.top_role:
+                return
+            uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
+            if not uid:
+                if member.display_name != name:
+                    roles = [r for r in member.roles if r != self.role]
+                    await member.edit(nick=name != member.name and name or None, roles=roles)
 
-        stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
-        new = f"{name} ⭐{stars}"
-        kwargs = {}
+            stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
+            new = f"{name} ⭐{stars}"
+            kwargs = {}
 
-        if stars and member.display_name != new:
-            kwargs.update(nick=new)
+            if stars and member.display_name != new:
+                kwargs.update(nick=new)
 
-        if self.role not in member.roles:
-            kwargs.update(roles=member.roles + [self.role])
+            if self.role not in member.roles:
+                kwargs.update(roles=member.roles + [self.role])
 
-        if kwargs:
-            await member.edit(**kwargs)
+            if kwargs:
+                await member.edit(**kwargs)
+        except discord.HTTPException:
+            pass
 
     @app_commands.command(name='link')
     @app_commands.describe(user_id='Your AOC user ID. Run /link for how to get it.')
