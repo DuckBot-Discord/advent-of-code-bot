@@ -64,7 +64,6 @@ class AOC(commands.Cog):
 
     async def cog_load(self) -> None:
         """Starts the process of fetching the leaderboard."""
-        await self.update_all_names()
         self.update_leaderboard_and_names.start()
         self.daily_thread.start()
 
