@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import datetime, time
 
 import re
 import asyncpg
@@ -13,13 +13,6 @@ from bot import AOCBot, get
 from .models import Leaderboard
 
 _log = getLogger(__name__)
-
-
-def get_times() -> list[time]:
-    times = [time(hour=0, minute=m, tzinfo=timezone.utc) for m in range(0, 60, 10)]
-    for i in range(1, 24):
-        times += [time(hour=i, minute=m, tzinfo=timezone.utc) for m in range(0, 60, 15)]
-    return times
 
 
 class AOC(commands.Cog):
@@ -71,7 +64,7 @@ class AOC(commands.Cog):
         self.update_leaderboard_and_names.cancel()
         self.daily_thread.cancel()
 
-    @tasks.loop(time=get_times())
+    @tasks.loop(minutes=5)
     async def update_leaderboard_and_names(self):
         await self.update_leaderboard()
         await self.update_all_names()
@@ -124,13 +117,15 @@ class AOC(commands.Cog):
     async def update_all_names(self, bypass: bool = False):
         """Updates all the nicks of users who have a claimed aoc user."""
         if bypass or datetime.now().month == 12:
-            await self.guild.chunk()
+            if not self.guild.chunked:
+                await self.guild.chunk()
             for member in self.guild.members:
                 await self.update_name(member)
 
     async def clear_names(self):
         """Clears all the names of the star counters."""
-        await self.guild.chunk()
+        if not self.guild.chunked:
+            await self.guild.chunk()
         for member in self.guild.members:
             name = self.trim_name(member)
             if name != member.display_name:
