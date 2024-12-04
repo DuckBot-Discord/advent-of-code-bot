@@ -77,7 +77,7 @@ class AOC(commands.Cog):
         await self.update_leaderboard()
         await self.update_all_names()
 
-    @tasks.loop(name='create-aoc-daily-thread', time=time(5))
+    @tasks.loop(time=time(hour=5))
     async def daily_thread(self):
         now = discord.utils.utcnow()
         if now.month != 12:
@@ -149,9 +149,17 @@ class AOC(commands.Cog):
                 return
             uid = await self.bot.pool.fetchval("SELECT aoc_user_id FROM linked_accounts WHERE user_id = $1", member.id)
             if not uid:
+                kwargs = {}
                 if member.display_name != name:
-                    roles = [r for r in member.roles if r != self.role]
-                    await member.edit(nick=name != member.name and name or None, roles=roles)
+                    kwargs.update(nick=name)
+
+                if self.role in member.roles:
+                    kwargs.update(roles=[r for r in member.roles if r != self.role])
+
+                if kwargs:
+                    await member.edit(**kwargs)
+
+                return
 
             stars = self.leaderboard.get("members", {}).get(str(uid), {}).get("stars") or 0
             new = f"{name} ⭐{stars}"
