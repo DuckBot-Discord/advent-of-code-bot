@@ -225,11 +225,9 @@ class AOC(commands.Cog):
     async def display_leaderboard(self, interaction: discord.Interaction):
         """Displays this server's AOC leaderboard"""
         await interaction.response.defer()
-
-        await self.update_leaderboard()
         leaderboard_data = sorted(
             list(self.leaderboard["members"].values()),
-            key=lambda u: (u["local_score"], u["name"]),
+            key=lambda u: (u["local_score"], u["stars"], u["name"]),
             reverse=True,
         )
 
@@ -245,7 +243,7 @@ class AOC(commands.Cog):
         previous_score = 0
         for idx, leaderboard_entry in enumerate(leaderboard_data, start=1):
 
-            name = leaderboard_entry["name"]
+            name = discord.utils.escape_markdown(leaderboard_entry["name"]) + f" `⭐" + str(leaderboard_entry["stars"]) + "`"
             discord_id = user_mapping.get(leaderboard_entry["id"], None)
             if discord_id:
                 discord_user = self.guild.get_member(discord_id)
@@ -262,6 +260,8 @@ class AOC(commands.Cog):
             score = str(leaderboard_entry['local_score']).rjust(score_width)
 
             paginator.add_line(f"`{index} {score}` {name}")
+
+        paginator.add_line(f"[Open in website](https://adventofcode.com/leaderboard/private/view/{get('LEADERBOARD_INVITE').partition('-')[0]})")
 
         pages = iter(paginator.pages)
         await interaction.followup.send(next(pages))
